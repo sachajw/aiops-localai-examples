@@ -21,12 +21,19 @@ SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT', 'You are a helpful assistant.')
 BACKGROUND_AUDIO = os.getenv('BACKGROUND_AUDIO', 'false').lower() in ['true', '1', 'yes', 'on']
 DEBUG_PLAYBACK = os.getenv('DEBUG_PLAYBACK', 'false').lower() in ['true', '1', 'yes', 'on']
 WAKE_WORD = os.getenv('WAKE_WORD', '')  # Empty string means no wake word
+MCP_MODE = os.getenv('MCP_MODE', 'false').lower() in ['true', '1', 'yes', 'on']
 
 # Initialize OpenAI client
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL
 )
+# Initialize OpenAI client
+mcpclient = OpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL+"/mcp"
+)
+
 
 # Initialize pygame mixer for audio playback
 pygame.mixer.init()
@@ -162,10 +169,6 @@ def text_to_speech(text):
         # Clean text for TTS
         cleaned_text = clean_text_for_tts(text)
         
-        client = OpenAI(
-            api_key=OPENAI_API_KEY,
-            base_url=OPENAI_BASE_URL+"/v1"
-        )     
         # Call OpenAI TTS API
         response = client.audio.speech.create(
             model=OPENAI_TTS_MODEL,
@@ -199,12 +202,18 @@ def get_openai_response(user_text):
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ] + conversation_history[-10:]  # Keep last 10 messages for context
-        
-        # Call OpenAI API
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=messages,
-        )
+
+        if MCP_MODE:
+            print("🤖 MCP Mode: ", MCP_MODE)
+            response = mcpclient.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+            )
+        else:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+            )
         
         assistant_response = response.choices[0].message.content
         
@@ -320,10 +329,6 @@ def transcribe_wav_with_openai(wav_file_path):
     """Transcribe WAV file using OpenAI Whisper API"""
     try:
         print("🎤 Transcribing with OpenAI Whisper...")
-        client = OpenAI(
-            api_key=OPENAI_API_KEY,
-            base_url=OPENAI_BASE_URL+"/v1"
-        )    
         with open(wav_file_path, 'rb') as audio_file:
             transcript = client.audio.transcriptions.create(
                 model=WHISPER_MODEL,
